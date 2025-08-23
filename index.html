@@ -187,7 +187,7 @@
       <label for="script-text-input">Script:</label>
       <textarea id="script-text-input" placeholder="Enter your script here"></textarea>
       <label for="scroll-speed-input">Scroll Speed:</label>
-      <input type="range" id="scroll-speed-input" min="1" max="10" value="2">
+      <input type="range" id="scroll-speed-input" min="1" max="30" value="2">
       <span id="speed-value">2</span>
       <div>
         <button id="start-btn">Start</button>
@@ -262,7 +262,7 @@
         scrollInterval = null;
         isScrolling = false;
       }
-    }, 50);
+    }, 60);
     isScrolling = true;
   }
 
@@ -355,7 +355,7 @@
       stopScrolling();
       startScrolling();
     }
-    if (event.keyCode === 85 && scrollSpeed < 10) {
+    if (event.keyCode === 85 && scrollSpeed < 30) {
       scrollSpeed += 1;
       speedInput.value = scrollSpeed;
       speedValue.textContent = scrollSpeed;
