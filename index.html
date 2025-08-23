@@ -165,6 +165,7 @@
       let manualScrollDirection = null;
       let manualScrollInterval = null;
       let isScrolling = false;
+      let wasAutoScrollingBeforeManual = false;
 
       function updateTeleprompterText() {
         // Preserve line breaks by converting them to <br>
@@ -173,29 +174,48 @@
       }
 
       function startScrolling() {
+        // clear any manual scroll state
+        if (manualScrollInterval) {
+          clearInterval(manualScrollInterval);
+          manualScrollInterval = null;
+        }
+        manualScrollDirection = null;
+
+        // start or resume automatic scrolling without resetting position
         if (scrollInterval) clearInterval(scrollInterval);
         scrollInterval = setInterval(() => {
-          teleprompterText.scrollTop += scrollSpeed * 0.3; // slower scroll for mobile
+          teleprompterText.scrollTop += scrollSpeed;
           if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
+            teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
             clearInterval(scrollInterval);
+            scrollInterval = null;
+            isScrolling = false;
           }
-        }, 60);
+        }, 80);
+        isScrolling = true;
       }
 
       function stopScrolling() {
-        if (scrollInterval) clearInterval(scrollInterval);
+        if (scrollInterval) {
+          clearInterval(scrollInterval);
+          scrollInterval = null;
+        }
+        if (manualScrollInterval) {
+          clearInterval(manualScrollInterval);
+          manualScrollInterval = null;
+        }
+        manualScrollDirection = null;
+        isScrolling = false;
+        wasAutoScrollingBeforeManual = false;
       }
 
       function toggleScrolling() {
         if (isScrolling) {
           stopScrolling();
-          isScrolling = false;
-          // Do NOT remove fullscreen-sim class here
-          // teleprompterText.classList.remove('fullscreen-sim'); // <-- Remove or comment out this line
+          // keep fullscreen-sim if you want; not removing here on purpose
         } else {
           teleprompterText.classList.add('fullscreen-sim');
           startScrolling();
-          isScrolling = true;
         }
       }
 
@@ -207,12 +227,15 @@
       speedInput.addEventListener('input', () => {
         scrollSpeed = parseInt(speedInput.value, 10);
         speedValue.textContent = scrollSpeed;
-        if (scrollInterval) {
+        // only restart auto-scroll if it is already active
+        if (isScrolling) {
           startScrolling();
         }
       });
 
       startBtn.addEventListener('click', () => {
+        // enter simulated fullscreen and start scrolling
+        teleprompterText.classList.add('fullscreen-sim');
         startScrolling();
       });
 
@@ -224,32 +247,48 @@
         if (teleprompterText.classList.contains('fullscreen-sim')) {
           teleprompterText.classList.remove('fullscreen-sim');
           stopScrolling();
-          isScrolling = false;
         }
       });
 
       document.addEventListener('keydown', function(event) {
-        console.log('Key code:', event.keyCode); // Log key codes for debugging
-        if (scrollInterval) { // Only allow manual scroll while auto-scrolling is active
-          if (event.keyCode === 38 && manualScrollDirection !== 'up') { // Up arrow
-            manualScrollDirection = 'up';
-            clearInterval(scrollInterval); // Pause auto-scroll
-            manualScrollInterval = setInterval(() => {
-              teleprompterText.scrollTop -= scrollSpeed * 0.3;
-              if (teleprompterText.scrollTop < 0) teleprompterText.scrollTop = 0;
-            }, 16); // ~60fps
+        const code = event.keyCode || event.which;
+        // handle long-press up/down for manual scrolling
+        if (code === 38 || code === 40) {
+          // prevent default page scrolling behavior
+          event.preventDefault();
+          const dir = code === 38 ? 'up' : 'down';
+          if (manualScrollDirection === dir) return; // already scrolling that way
+
+          // remember if auto-scroll was active so we can resume later
+          wasAutoScrollingBeforeManual = !!scrollInterval || isScrolling;
+
+          manualScrollDirection = dir;
+
+          // pause auto-scroll (but do not reset teleprompterText.scrollTop)
+          if (scrollInterval) {
+            clearInterval(scrollInterval);
+            scrollInterval = null;
           }
-          if (event.keyCode === 40 && manualScrollDirection !== 'down') { // Down arrow
-            manualScrollDirection = 'down';
-            clearInterval(scrollInterval); // Pause auto-scroll
-            manualScrollInterval = setInterval(() => {
-              teleprompterText.scrollTop += scrollSpeed * 0.3;
-              if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
-                teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
-              }
-            }, 16); // ~60fps
+          if (manualScrollInterval) {
+            clearInterval(manualScrollInterval);
+            manualScrollInterval = null;
           }
+
+          // start manual incremental scrolling from current position
+          manualScrollInterval = setInterval(() => {
+            if (manualScrollDirection !== dir) return;
+            const delta = Math.max(1, Math.round(scrollSpeed * 0.5)); // adjust multiplier as desired
+            if (dir === 'up') {
+              teleprompterText.scrollTop = Math.max(0, teleprompterText.scrollTop - delta);
+            } else {
+              teleprompterText.scrollTop = Math.min(
+                teleprompterText.scrollHeight - teleprompterText.clientHeight,
+                teleprompterText.scrollTop + delta
+              );
+            }
+          }, 16); // ~60fps
         }
+
         if (event.keyCode === 89) { // 'Y' key
           toggleScrolling();
         }
@@ -257,14 +296,13 @@
           teleprompterText.scrollTop = 0; // Go to beginning
           stopScrolling();
           startScrolling();
-          isScrolling = true;
         }
         if (event.keyCode === 85) { // 'U' key - increase speed
           if (scrollSpeed < 10) {
             scrollSpeed += 1;
             speedInput.value = scrollSpeed;
             speedValue.textContent = scrollSpeed;
-            if (scrollInterval) {
+            if (isScrolling) {
               startScrolling();
             }
           }
@@ -274,7 +312,7 @@
             scrollSpeed -= 1;
             speedInput.value = scrollSpeed;
             speedValue.textContent = scrollSpeed;
-            if (scrollInterval) {
+            if (isScrolling) {
               startScrolling();
             }
           }
@@ -282,22 +320,23 @@
       });
 
       document.addEventListener('keyup', function(event) {
-        if ((event.keyCode === 38 && manualScrollDirection === 'up') ||
-            (event.keyCode === 40 && manualScrollDirection === 'down')) {
-          manualScrollDirection = null;
+        const code = event.keyCode || event.which;
+        // if lifting the key that matches current manual direction, stop manual and resume auto if needed
+        if ((code === 38 && manualScrollDirection === 'up') ||
+            (code === 40 && manualScrollDirection === 'down')) {
           if (manualScrollInterval) {
             clearInterval(manualScrollInterval);
             manualScrollInterval = null;
           }
-          // Resume auto-scroll
-          startScrolling();
+          manualScrollDirection = null;
+
+          // resume auto-scroll only if it was active before manual override
+          if (wasAutoScrollingBeforeManual) {
+            startScrolling();
+          }
+          wasAutoScrollingBeforeManual = false;
         }
       });
-
-//40 key is down 
-//30 key is up
-//76 right
-//85 left
 
       // Initialize
       updateTeleprompterText();
