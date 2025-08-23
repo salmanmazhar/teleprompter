@@ -169,254 +169,225 @@
     <div id="teleprompter-text"><div class="tele-inner"></div></div>
   </div>
 
-  <script>
-    (function() {
-      const textInput = document.getElementById('script-text-input');
-      const teleprompterText = document.getElementById('teleprompter-text');
-      const speedInput = document.getElementById('scroll-speed-input');
-      const speedValue = document.getElementById('speed-value');
-      const startBtn = document.getElementById('start-btn');
-      const pasteBtn = document.getElementById('paste-btn');
-      const stopBtn = document.getElementById('stop-btn');
-      let scrollInterval = null;
-      let scrollSpeed = parseInt(speedInput.value, 10);
-      let manualScrollDirection = null;
-      let manualScrollInterval = null;
-      let isScrolling = false;
-      let wasAutoScrollingBeforeManual = false;
+<script>
+(function() {
+  const textInput = document.getElementById('script-text-input');
+  const teleprompterText = document.getElementById('teleprompter-text');
+  const speedInput = document.getElementById('scroll-speed-input');
+  const speedValue = document.getElementById('speed-value');
+  const startBtn = document.getElementById('start-btn');
+  const pasteBtn = document.getElementById('paste-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  let scrollInterval = null;
+  let scrollSpeed = parseInt(speedInput.value, 10);
+  let manualScrollDirection = null;
+  let manualScrollInterval = null;
+  let isScrolling = false;
+  let wasAutoScrollingBeforeManual = false;
 
-      // ✅ Handle Paste Button
-      pasteBtn.addEventListener('click', async () => {
-        try {
-          const text = await navigator.clipboard.readText();
-          textInput.value = text;
-          updateTeleprompterText();
-        } catch (err) {
-          alert('Failed to read clipboard. Please allow clipboard access.');
-        }
-      });
-
-      // Update content
-      function updateTeleprompterText() {
-        const teleInner = teleprompterText.querySelector('.tele-inner');
-        teleInner.textContent = textInput.value || '';
-      }
-
-      textInput.addEventListener('input', () => {
+  // ✅ Handle Paste Button (mobile-safe)
+  pasteBtn.addEventListener('click', async () => {
+    textInput.focus();
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        textInput.value = text;
         updateTeleprompterText();
-        stopScrolling();
-      });
-
-      textInput.addEventListener('paste', () => {
-        setTimeout(updateTeleprompterText, 0);
-      });
-
-      textInput.addEventListener('change', updateTeleprompterText);
-
-      function startScrolling() {
-        if (manualScrollInterval) {
-          clearInterval(manualScrollInterval);
-          manualScrollInterval = null;
-        }
-        manualScrollDirection = null;
-
-        if (scrollInterval) clearInterval(scrollInterval);
-        scrollInterval = setInterval(() => {
-          teleprompterText.scrollTop += scrollSpeed;
-          if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
-            teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
-            clearInterval(scrollInterval);
-            scrollInterval = null;
-            isScrolling = false;
-          }
-        }, 80);
-        isScrolling = true;
+      } else {
+        // Fallback for iOS and older Android
+        document.execCommand('paste');
       }
+    } catch (err) {
+      alert('Clipboard paste failed. Long-press in the textbox and choose "Paste" manually.');
+    }
+  });
 
-      function stopScrolling() {
-        if (scrollInterval) clearInterval(scrollInterval);
-        if (manualScrollInterval) clearInterval(manualScrollInterval);
-        manualScrollDirection = null;
+  function updateTeleprompterText() {
+    const teleInner = teleprompterText.querySelector('.tele-inner');
+    teleInner.textContent = textInput.value || '';
+  }
+
+  textInput.addEventListener('input', () => {
+    updateTeleprompterText();
+    stopScrolling();
+  });
+
+  textInput.addEventListener('paste', () => {
+    setTimeout(updateTeleprompterText, 0);
+  });
+
+  textInput.addEventListener('change', updateTeleprompterText);
+
+  function startScrolling() {
+    if (manualScrollInterval) {
+      clearInterval(manualScrollInterval);
+      manualScrollInterval = null;
+    }
+    manualScrollDirection = null;
+
+    if (scrollInterval) clearInterval(scrollInterval);
+    scrollInterval = setInterval(() => {
+      teleprompterText.scrollTop += scrollSpeed;
+      if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
+        teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
+        clearInterval(scrollInterval);
         scrollInterval = null;
-        manualScrollInterval = null;
         isScrolling = false;
-        wasAutoScrollingBeforeManual = false;
+      }
+    }, 80);
+    isScrolling = true;
+  }
+
+  function stopScrolling() {
+    if (scrollInterval) clearInterval(scrollInterval);
+    if (manualScrollInterval) clearInterval(manualScrollInterval);
+    manualScrollDirection = null;
+    scrollInterval = null;
+    manualScrollInterval = null;
+    isScrolling = false;
+    wasAutoScrollingBeforeManual = false;
+  }
+
+  // ✅ Fullscreen on visible element (not <html>)
+  function enterFullscreenAndStart() {
+    const el = teleprompterText;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+
+    if (request) {
+      request.call(el).then(() => {
+        startScrolling();
+      }).catch((e) => {
+        console.warn('Fullscreen failed:', e);
+        startScrolling(); // fallback
+      });
+    } else {
+      startScrolling();
+    }
+  }
+
+  function exitFullscreenIfAny() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
+      try { exit.call(document); } catch (e) {}
+    }
+  }
+
+  function toggleScrolling() {
+    if (isScrolling) {
+      stopScrolling();
+      exitFullscreenIfAny();
+    } else {
+      enterFullscreenAndStart();
+    }
+  }
+
+  // ✅ Use only click (user gesture) for fullscreen
+  startBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    enterFullscreenAndStart();
+  });
+
+  stopBtn.addEventListener('click', () => {
+    stopScrolling();
+    exitFullscreenIfAny();
+  });
+
+  teleprompterText.addEventListener('click', () => {
+    const isFull = document.fullscreenElement === teleprompterText || document.webkitFullscreenElement === teleprompterText;
+    if (isFull) {
+      exitFullscreenIfAny();
+      stopScrolling();
+    }
+  });
+
+  document.addEventListener('keydown', function(event) {
+    const code = event.keyCode || event.which;
+    if (code === 38 || code === 40) {
+      event.preventDefault();
+      const dir = code === 38 ? 'up' : 'down';
+      if (manualScrollDirection === dir) return;
+      wasAutoScrollingBeforeManual = !!scrollInterval || isScrolling;
+      manualScrollDirection = dir;
+      if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
+      }
+      if (manualScrollInterval) {
+        clearInterval(manualScrollInterval);
+        manualScrollInterval = null;
       }
 
-      function enterFullscreenAndStart() {
-        const el = document.documentElement;
-        const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-        if (request) {
-          try {
-            request.call(el);
-          } catch (e) {
-            requestAnimationFrame(() => requestAnimationFrame(startScrolling));
-          }
-          setTimeout(() => {
-            const isFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
-            if (!isFull) {
-              requestAnimationFrame(() => requestAnimationFrame(startScrolling));
-            }
-          }, 300);
+      manualScrollInterval = setInterval(() => {
+        if (manualScrollDirection !== dir) return;
+        const delta = Math.max(1, Math.round(scrollSpeed * 0.5));
+        if (dir === 'up') {
+          teleprompterText.scrollTop = Math.max(0, teleprompterText.scrollTop - delta);
         } else {
-          requestAnimationFrame(() => requestAnimationFrame(startScrolling));
+          teleprompterText.scrollTop = Math.min(
+            teleprompterText.scrollHeight - teleprompterText.clientHeight,
+            teleprompterText.scrollTop + delta
+          );
         }
+      }, 16);
+    }
+
+    if (event.keyCode === 89) toggleScrolling(); // 'Y'
+    if (event.keyCode === 75) { // 'K'
+      teleprompterText.scrollTop = 0;
+      stopScrolling();
+      startScrolling();
+    }
+    if (event.keyCode === 85 && scrollSpeed < 10) { // 'U'
+      scrollSpeed += 1;
+      speedInput.value = scrollSpeed;
+      speedValue.textContent = scrollSpeed;
+      if (isScrolling) startScrolling();
+    }
+    if (event.keyCode === 76 && scrollSpeed > 1) { // 'L'
+      scrollSpeed -= 1;
+      speedInput.value = scrollSpeed;
+      speedValue.textContent = scrollSpeed;
+      if (isScrolling) startScrolling();
+    }
+  });
+
+  document.addEventListener('keyup', function(event) {
+    const code = event.keyCode || event.which;
+    if ((code === 38 && manualScrollDirection === 'up') ||
+        (code === 40 && manualScrollDirection === 'down')) {
+      if (manualScrollInterval) {
+        clearInterval(manualScrollInterval);
+        manualScrollInterval = null;
       }
-
-      function exitFullscreenIfAny() {
-        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
-        if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
-          try { exit.call(document); } catch (e) {}
-        }
+      manualScrollDirection = null;
+      if (wasAutoScrollingBeforeManual) {
+        startScrolling();
       }
+      wasAutoScrollingBeforeManual = false;
+    }
+  });
 
-      function toggleScrolling() {
-        if (isScrolling) {
-          stopScrolling();
-          exitFullscreenIfAny();
-        } else {
-          enterFullscreenAndStart();
-        }
-      }
-      
-      // ensure Start button uses a real pointer/touch gesture so fullscreen is allowed on mobile
-      startBtn.addEventListener('pointerdown', (e) => {
-        // pointerdown is a user gesture; prevent default to avoid virtual keyboard on some devices
-        e.preventDefault();
-        enterFullscreenAndStart();
-      });
+  // ✅ Adjusted fullscreenchange handler
+  function onFullScreenChange() {
+    const isFull = document.fullscreenElement === teleprompterText || document.webkitFullscreenElement === teleprompterText;
+    if (isFull) {
+      teleprompterText.classList.add('is-fullscreen');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!isScrolling) startScrolling();
+      }));
+    } else {
+      teleprompterText.classList.remove('is-fullscreen');
+    }
+  }
 
-      // keep click fallback for non-pointer environments
-      startBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        enterFullscreenAndStart();
-      });
+  document.addEventListener('fullscreenchange', onFullScreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullScreenChange);
+  document.addEventListener('msfullscreenchange', onFullScreenChange);
 
-      stopBtn.addEventListener('click', () => {
-        stopScrolling();
-      });
+  // Initial content render
+  updateTeleprompterText();
+})();
+</script>
 
-      teleprompterText.addEventListener('click', () => {
-        const isRealFull = document.fullscreenElement === teleprompterText || document.webkitFullscreenElement === teleprompterText;
-        if (isRealFull) {
-          exitFullscreenIfAny();
-          stopScrolling();
-        }
-      });
-
-      document.addEventListener('keydown', function(event) {
-        const code = event.keyCode || event.which;
-        // handle long-press up/down for manual scrolling
-        if (code === 38 || code === 40) {
-          // prevent default page scrolling behavior
-          event.preventDefault();
-          const dir = code === 38 ? 'up' : 'down';
-          if (manualScrollDirection === dir) return; // already scrolling that way
-
-          // remember if auto-scroll was active so we can resume later
-          wasAutoScrollingBeforeManual = !!scrollInterval || isScrolling;
-
-          manualScrollDirection = dir;
-
-          // pause auto-scroll (but do not reset teleprompterText.scrollTop)
-          if (scrollInterval) {
-            clearInterval(scrollInterval);
-            scrollInterval = null;
-          }
-          if (manualScrollInterval) {
-            clearInterval(manualScrollInterval);
-            manualScrollInterval = null;
-          }
-
-          // start manual incremental scrolling from current position
-          manualScrollInterval = setInterval(() => {
-            if (manualScrollDirection !== dir) return;
-            const delta = Math.max(1, Math.round(scrollSpeed * 0.5)); // adjust multiplier as desired
-            if (dir === 'up') {
-              teleprompterText.scrollTop = Math.max(0, teleprompterText.scrollTop - delta);
-            } else {
-              teleprompterText.scrollTop = Math.min(
-                teleprompterText.scrollHeight - teleprompterText.clientHeight,
-                teleprompterText.scrollTop + delta
-              );
-            }
-          }, 16); // ~60fps
-        }
-
-        if (event.keyCode === 89) { // 'Y' key
-          toggleScrolling();
-        }
-        if (event.keyCode === 75) { // 'K' key
-          teleprompterText.scrollTop = 0; // Go to beginning
-          stopScrolling();
-          startScrolling();
-        }
-        if (event.keyCode === 85) { // 'U' key - increase speed
-          if (scrollSpeed < 10) {
-            scrollSpeed += 1;
-            speedInput.value = scrollSpeed;
-            speedValue.textContent = scrollSpeed;
-            if (isScrolling) {
-              startScrolling();
-            }
-          }
-        }
-        if (event.keyCode === 76) { // 'L' key - decrease speed
-          if (scrollSpeed > 1) {
-            scrollSpeed -= 1;
-            speedInput.value = scrollSpeed;
-            speedValue.textContent = scrollSpeed;
-            if (isScrolling) {
-              startScrolling();
-            }
-          }
-        }
-      });
-
-      document.addEventListener('keyup', function(event) {
-        const code = event.keyCode || event.which;
-        // if lifting the key that matches current manual direction, stop manual and resume auto if needed
-        if ((code === 38 && manualScrollDirection === 'up') ||
-            (code === 40 && manualScrollDirection === 'down')) {
-          if (manualScrollInterval) {
-            clearInterval(manualScrollInterval);
-            manualScrollInterval = null;
-          }
-          manualScrollDirection = null;
-
-          // resume auto-scroll only if it was active before manual override
-          if (wasAutoScrollingBeforeManual) {
-            startScrolling();
-          }
-          wasAutoScrollingBeforeManual = false;
-        }
-      });
-
-      function onFullScreenChange() {
-        // we request fullscreen on document.documentElement; treat any real fullscreen entry as "teleprompter fullscreen"
-        const isAnyFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
-        if (isAnyFull) {
-          // apply class to make teleprompter element fill viewport (we requested fullscreen on document)
-          teleprompterText.classList.add('is-fullscreen');
-          // wait two frames for browser to update layout, then start auto-scroll
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (!isScrolling) startScrolling();
-          }));
-        } else {
-          // exited fullscreen: remove class, keep current scroll position, stop auto only if intended
-          teleprompterText.classList.remove('is-fullscreen');
-        }
-      }
- 
-      // listen for fullscreen changes (standard + webkit)
-      document.addEventListener('fullscreenchange', onFullScreenChange);
-      document.addEventListener('webkitfullscreenchange', onFullScreenChange);
-      document.addEventListener('msfullscreenchange', onFullScreenChange);
-
-      // Initialize
-      // populate teleprompter with any initial textarea content
-      updateTeleprompterText();
-    })();
-  </script>
 </body>
 </html>
