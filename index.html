@@ -40,39 +40,36 @@
       border: none;
       background: #111;
       color: #f1f1f1;
-      overflow-y: scroll; /* Change from auto to scroll */
-      -webkit-overflow-scrolling: touch; /* Enable smooth scrolling on iOS */
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
       font-size: 2em;
       padding: 40px 20px;
       box-sizing: border-box;
       text-align: left;
       line-height: 2;
+      /* container must NOT be flipped (keeps scrolling/layout stable) */
+      transform: none;
+      position: relative;
+    }
+
+    /* Mirror only the inner content so the scroll container behaves normally */
+    #teleprompter-text .tele-inner {
       transform: scaleX(-1);
-      position: relative; /* Add this */
+      -webkit-transform: scaleX(-1);
+      display: block;
+      white-space: pre-wrap; /* preserve newlines and spacing */
+      color: inherit;
     }
-    /* Ensure mirroring in fullscreen for all browsers */
-    #teleprompter-text:fullscreen,
-    #teleprompter-text:-webkit-full-screen,
-    #teleprompter-text:-ms-fullscreen {
-      transform: scaleX(-1) !important;
-    }
-    #teleprompter-text.fullscreen-sim {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 9999;
-      background: #111;
-      color: #f1f1f1;
-      font-size: 2em;
-      padding: 40px 20px;
-      box-sizing: border-box;
-      overflow-y: auto;
-      text-align: left;
-      line-height: 2;
+
+    /* When in true fullscreen keep the inner block mirrored.
+       Do NOT flip the container itself (avoids scroll/visibility issues). */
+    #teleprompter-text:fullscreen .tele-inner,
+    #teleprompter-text:-webkit-full-screen .tele-inner,
+    #teleprompter-text:-ms-fullscreen .tele-inner {
       transform: scaleX(-1);
+      -webkit-transform: scaleX(-1);
     }
+
     label {
       font-weight: bold;
       margin-bottom: 8px;
@@ -170,7 +167,7 @@
         <button id="stop-btn">Stop</button>
       </div>
     </div>
-    <div id="teleprompter-text"></div>
+    <div id="teleprompter-text"><div class="tele-inner"></div></div>
   </div>
   <script>
     (function() {
@@ -187,10 +184,25 @@
       let isScrolling = false;
       let wasAutoScrollingBeforeManual = false;
 
+      // update teleprompter content when user types or pastes
+      textInput.addEventListener('input', () => {
+        updateTeleprompterText();
+        // keep current scrolling state (stop auto only if desired)
+        stopScrolling();
+      });
+      // some paste events may need a tick so read textarea after paste completes
+      textInput.addEventListener('paste', () => {
+        setTimeout(updateTeleprompterText, 0);
+      });
+      // also update on change to catch non-input updates
+      textInput.addEventListener('change', updateTeleprompterText);
+      
       function updateTeleprompterText() {
-        // Preserve line breaks by converting them to <br>
-        teleprompterText.innerHTML = textInput.value.replace(/\n/g, '<br>');
-        teleprompterText.scrollTop = 0;
+        // Update the inner mirrored block using textContent (safer) and pre-wrap handling
+        const teleInner = teleprompterText.querySelector('.tele-inner');
+        teleInner.textContent = textInput.value || '';
+
+        // Do not force scrollTop = 0 here so current position (auto/manual) isn't lost.
       }
 
       function startScrolling() {
@@ -232,34 +244,66 @@
         wasAutoScrollingBeforeManual = false;
       }
 
-      function toggleScrolling() {
-        if (isScrolling) {
-          stopScrolling();
-          // keep fullscreen-sim if you want; not removing here on purpose
+      function enterFullscreenAndStart() {
+        const el = teleprompterText;
+        const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (request) {
+          try {
+            request.call(el);
+            // startScrolling will be triggered by fullscreenchange handler after sizes settled
+          } catch (e) {
+            // if request throws, just start scrolling without simulated fullscreen
+            requestAnimationFrame(() => requestAnimationFrame(startScrolling));
+          }
+          // If the browser doesn't grant fullscreen quickly, ensure scroll starts anyway after a short delay
+          setTimeout(() => {
+            const isRealFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
+            if (!isRealFull) {
+              requestAnimationFrame(() => requestAnimationFrame(startScrolling));
+            }
+          }, 300);
         } else {
-          teleprompterText.classList.add('fullscreen-sim');
-          startScrolling();
+          // No Fullscreen API -> just start scrolling
+          requestAnimationFrame(() => requestAnimationFrame(startScrolling));
         }
       }
 
-      textInput.addEventListener('input', () => {
-        updateTeleprompterText();
-        stopScrolling();
-      });
-
-      speedInput.addEventListener('input', () => {
-        scrollSpeed = parseInt(speedInput.value, 10);
-        speedValue.textContent = scrollSpeed;
-        // only restart auto-scroll if it is already active
-        if (isScrolling) {
-          startScrolling();
+      function exitFullscreenIfAny() {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
+          try { exit.call(document); } catch (e) { /* ignore */ }
         }
-      });
+      }
 
+      function onFullScreenChange() {
+        const el = teleprompterText;
+        const isRealFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
+        if (isRealFull) {
+          // wait a couple frames to ensure sizes are correct then start
+          requestAnimationFrame(() => requestAnimationFrame(startScrolling));
+        } else {
+          // left fullscreen: do nothing (keep scroll position)
+        }
+      }
+
+      // listen for fullscreen changes (standard + webkit)
+      document.addEventListener('fullscreenchange', onFullScreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullScreenChange);
+
+      function toggleScrolling() {
+        if (isScrolling) {
+          stopScrolling();
+          // exit real fullscreen if present
+          exitFullscreenIfAny();
+        } else {
+          // try real fullscreen first, fallback handled inside enterFullscreenAndStart
+          enterFullscreenAndStart();
+        }
+      }
+      
       startBtn.addEventListener('click', () => {
-        // enter simulated fullscreen and start scrolling
-        teleprompterText.classList.add('fullscreen-sim');
-        startScrolling();
+        // enter fullscreen (if possible) and start scrolling
+        enterFullscreenAndStart();
       });
 
       stopBtn.addEventListener('click', () => {
@@ -267,8 +311,9 @@
       });
 
       teleprompterText.addEventListener('click', () => {
-        if (teleprompterText.classList.contains('fullscreen-sim')) {
-          teleprompterText.classList.remove('fullscreen-sim');
+        const isRealFull = document.fullscreenElement === teleprompterText || document.webkitFullscreenElement === teleprompterText;
+        if (isRealFull) {
+          exitFullscreenIfAny();
           stopScrolling();
         }
       });
@@ -362,6 +407,7 @@
       });
 
       // Initialize
+      // populate teleprompter with any initial textarea content
       updateTeleprompterText();
     })();
   </script>
