@@ -337,7 +337,7 @@
       if (manualScrollInterval) clearInterval(manualScrollInterval);
 
       manualScrollInterval = setInterval(() => {
-        const delta = Math.max(1, Math.round(scrollSpeed +10));
+        const delta = Math.max(1, Math.round(scrollSpeed * 5));
         if (dir === 'up') {
           teleprompterText.scrollTop = Math.max(0, teleprompterText.scrollTop - delta);
         } else {
