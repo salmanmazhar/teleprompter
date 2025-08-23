@@ -18,6 +18,7 @@
       height: 100vh;
       width: 100vw;
       box-sizing: border-box;
+      overflow: hidden; /* Prevent container from scrolling */
     }
     #controls {
       flex: 1 1 40%;
@@ -39,13 +40,15 @@
       border: none;
       background: #111;
       color: #f1f1f1;
-      overflow-y: auto;
+      overflow-y: scroll; /* Change from auto to scroll */
+      -webkit-overflow-scrolling: touch; /* Enable smooth scrolling on iOS */
       font-size: 2em;
       padding: 40px 20px;
       box-sizing: border-box;
       text-align: left;
-      line-height: 2; /* Increased line spacing */
-      transform: scaleX(-1); /* Mirror the text horizontally */
+      line-height: 2;
+      transform: scaleX(-1);
+      position: relative; /* Add this */
     }
     /* Ensure mirroring in fullscreen for all browsers */
     #teleprompter-text:fullscreen,
@@ -117,7 +120,17 @@
     @media (max-width: 700px) {
       #container {
         flex-direction: column;
+        overflow: hidden; /* Prevent container scrolling on mobile */
       }
+      
+      #teleprompter-text {
+        flex: 1 1 0; /* Change flex basis to 0 */
+        min-height: 0; /* Allow element to shrink */
+        height: 0; /* Allow element to grow from 0 */
+        position: relative;
+        overflow-y: scroll;
+      }
+  
       #controls {
         flex-direction: row;
         flex-wrap: wrap;
@@ -134,6 +147,13 @@
         width: 95vw;
         max-width: unset;
       }
+    }
+
+    /* Add these new styles to prevent body scrolling */
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
     }
   </style>
 </head>
@@ -184,6 +204,7 @@
         // start or resume automatic scrolling without resetting position
         if (scrollInterval) clearInterval(scrollInterval);
         scrollInterval = setInterval(() => {
+          // increment scrollTop; tweak multiplier if you want slower/faster
           teleprompterText.scrollTop += scrollSpeed;
           if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
             teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
@@ -192,6 +213,8 @@
             isScrolling = false;
           }
         }, 80);
+
+        // mark that auto-scrolling is active
         isScrolling = true;
       }
 
