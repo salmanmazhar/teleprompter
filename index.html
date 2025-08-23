@@ -18,7 +18,7 @@
       height: 100vh;
       width: 100vw;
       box-sizing: border-box;
-      overflow: hidden; /* Prevent container from scrolling */
+      overflow: hidden;
     }
     #controls {
       flex: 1 1 40%;
@@ -41,35 +41,35 @@
       background: #111;
       color: #f1f1f1;
       overflow-y: scroll;
-      -webkit-overflow-scrolling: touch;
       font-size: 2em;
       padding: 40px 20px;
       box-sizing: border-box;
       text-align: left;
       line-height: 2;
-      /* container must NOT be flipped (keeps scrolling/layout stable) */
       transform: none;
       position: relative;
     }
-
-    /* Mirror only the inner content so the scroll container behaves normally */
     #teleprompter-text .tele-inner {
       transform: scaleX(-1);
-      -webkit-transform: scaleX(-1);
       display: block;
-      white-space: pre-wrap; /* preserve newlines and spacing */
+      white-space: pre-wrap;
       color: inherit;
     }
-
-    /* When in true fullscreen keep the inner block mirrored.
-       Do NOT flip the container itself (avoids scroll/visibility issues). */
-    #teleprompter-text:fullscreen .tele-inner,
-    #teleprompter-text:-webkit-full-screen .tele-inner,
-    #teleprompter-text:-ms-fullscreen .tele-inner {
-      transform: scaleX(-1);
-      -webkit-transform: scaleX(-1);
+    #teleprompter-text.is-fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+      background: #111;
+      color: #f1f1f1;
+      padding: 40px 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 2;
     }
-
     label {
       font-weight: bold;
       margin-bottom: 8px;
@@ -98,7 +98,9 @@
       font-size: 1.1em;
       color: #f1f1f1;
     }
-    #start-btn, #stop-btn {
+
+    /* 🔧 Button styles: Now includes #paste-btn */
+    #start-btn, #stop-btn, #paste-btn {
       width: 100px;
       margin: 10px 5px 0 5px;
       font-size: 1em;
@@ -110,24 +112,25 @@
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
     }
-    #start-btn:hover, #stop-btn:hover {
+    #start-btn:hover, #stop-btn:hover, #paste-btn:hover {
       background: #444;
       color: #fff;
     }
+
     @media (max-width: 700px) {
       #container {
         flex-direction: column;
-        overflow: hidden; /* Prevent container scrolling on mobile */
+        overflow: hidden;
       }
-      
       #teleprompter-text {
-        flex: 1 1 0; /* Change flex basis to 0 */
-        min-height: 0; /* Allow element to shrink */
-        height: 0; /* Allow element to grow from 0 */
+        flex: 1 1 0;
+        min-height: 0;
+        height: 0;
         position: relative;
         overflow-y: scroll;
+        padding: 20px 10px;
+        font-size: 1.2em;
       }
-  
       #controls {
         flex-direction: row;
         flex-wrap: wrap;
@@ -136,17 +139,12 @@
         min-width: unset;
         padding: 10px;
       }
-      #teleprompter-text {
-        padding: 20px 10px;
-        font-size: 1.2em;
-      }
       #script-text-input {
         width: 95vw;
         max-width: unset;
       }
     }
 
-    /* Add these new styles to prevent body scrolling */
     html, body {
       margin: 0;
       height: 100%;
@@ -164,11 +162,13 @@
       <span id="speed-value">2</span>
       <div>
         <button id="start-btn">Start</button>
+        <button id="paste-btn">Paste</button>
         <button id="stop-btn">Stop</button>
       </div>
     </div>
     <div id="teleprompter-text"><div class="tele-inner"></div></div>
   </div>
+
   <script>
     (function() {
       const textInput = document.getElementById('script-text-input');
@@ -176,6 +176,7 @@
       const speedInput = document.getElementById('scroll-speed-input');
       const speedValue = document.getElementById('speed-value');
       const startBtn = document.getElementById('start-btn');
+      const pasteBtn = document.getElementById('paste-btn');
       const stopBtn = document.getElementById('stop-btn');
       let scrollInterval = null;
       let scrollSpeed = parseInt(speedInput.value, 10);
@@ -184,39 +185,43 @@
       let isScrolling = false;
       let wasAutoScrollingBeforeManual = false;
 
-      // update teleprompter content when user types or pastes
+      // ✅ Handle Paste Button
+      pasteBtn.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          textInput.value = text;
+          updateTeleprompterText();
+        } catch (err) {
+          alert('Failed to read clipboard. Please allow clipboard access.');
+        }
+      });
+
+      // Update content
+      function updateTeleprompterText() {
+        const teleInner = teleprompterText.querySelector('.tele-inner');
+        teleInner.textContent = textInput.value || '';
+      }
+
       textInput.addEventListener('input', () => {
         updateTeleprompterText();
-        // keep current scrolling state (stop auto only if desired)
         stopScrolling();
       });
-      // some paste events may need a tick so read textarea after paste completes
+
       textInput.addEventListener('paste', () => {
         setTimeout(updateTeleprompterText, 0);
       });
-      // also update on change to catch non-input updates
-      textInput.addEventListener('change', updateTeleprompterText);
-      
-      function updateTeleprompterText() {
-        // Update the inner mirrored block using textContent (safer) and pre-wrap handling
-        const teleInner = teleprompterText.querySelector('.tele-inner');
-        teleInner.textContent = textInput.value || '';
 
-        // Do not force scrollTop = 0 here so current position (auto/manual) isn't lost.
-      }
+      textInput.addEventListener('change', updateTeleprompterText);
 
       function startScrolling() {
-        // clear any manual scroll state
         if (manualScrollInterval) {
           clearInterval(manualScrollInterval);
           manualScrollInterval = null;
         }
         manualScrollDirection = null;
 
-        // start or resume automatic scrolling without resetting position
         if (scrollInterval) clearInterval(scrollInterval);
         scrollInterval = setInterval(() => {
-          // increment scrollTop; tweak multiplier if you want slower/faster
           teleprompterText.scrollTop += scrollSpeed;
           if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
             teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
@@ -225,45 +230,35 @@
             isScrolling = false;
           }
         }, 80);
-
-        // mark that auto-scrolling is active
         isScrolling = true;
       }
 
       function stopScrolling() {
-        if (scrollInterval) {
-          clearInterval(scrollInterval);
-          scrollInterval = null;
-        }
-        if (manualScrollInterval) {
-          clearInterval(manualScrollInterval);
-          manualScrollInterval = null;
-        }
+        if (scrollInterval) clearInterval(scrollInterval);
+        if (manualScrollInterval) clearInterval(manualScrollInterval);
         manualScrollDirection = null;
+        scrollInterval = null;
+        manualScrollInterval = null;
         isScrolling = false;
         wasAutoScrollingBeforeManual = false;
       }
 
       function enterFullscreenAndStart() {
-        const el = teleprompterText;
+        const el = document.documentElement;
         const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
         if (request) {
           try {
             request.call(el);
-            // startScrolling will be triggered by fullscreenchange handler after sizes settled
           } catch (e) {
-            // if request throws, just start scrolling without simulated fullscreen
             requestAnimationFrame(() => requestAnimationFrame(startScrolling));
           }
-          // If the browser doesn't grant fullscreen quickly, ensure scroll starts anyway after a short delay
           setTimeout(() => {
-            const isRealFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
-            if (!isRealFull) {
+            const isFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
+            if (!isFull) {
               requestAnimationFrame(() => requestAnimationFrame(startScrolling));
             }
           }, 300);
         } else {
-          // No Fullscreen API -> just start scrolling
           requestAnimationFrame(() => requestAnimationFrame(startScrolling));
         }
       }
@@ -271,38 +266,29 @@
       function exitFullscreenIfAny() {
         const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
         if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
-          try { exit.call(document); } catch (e) { /* ignore */ }
+          try { exit.call(document); } catch (e) {}
         }
       }
-
-      function onFullScreenChange() {
-        const el = teleprompterText;
-        const isRealFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
-        if (isRealFull) {
-          // wait a couple frames to ensure sizes are correct then start
-          requestAnimationFrame(() => requestAnimationFrame(startScrolling));
-        } else {
-          // left fullscreen: do nothing (keep scroll position)
-        }
-      }
-
-      // listen for fullscreen changes (standard + webkit)
-      document.addEventListener('fullscreenchange', onFullScreenChange);
-      document.addEventListener('webkitfullscreenchange', onFullScreenChange);
 
       function toggleScrolling() {
         if (isScrolling) {
           stopScrolling();
-          // exit real fullscreen if present
           exitFullscreenIfAny();
         } else {
-          // try real fullscreen first, fallback handled inside enterFullscreenAndStart
           enterFullscreenAndStart();
         }
       }
       
-      startBtn.addEventListener('click', () => {
-        // enter fullscreen (if possible) and start scrolling
+      // ensure Start button uses a real pointer/touch gesture so fullscreen is allowed on mobile
+      startBtn.addEventListener('pointerdown', (e) => {
+        // pointerdown is a user gesture; prevent default to avoid virtual keyboard on some devices
+        e.preventDefault();
+        enterFullscreenAndStart();
+      });
+
+      // keep click fallback for non-pointer environments
+      startBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         enterFullscreenAndStart();
       });
 
@@ -405,6 +391,27 @@
           wasAutoScrollingBeforeManual = false;
         }
       });
+
+      function onFullScreenChange() {
+        // we request fullscreen on document.documentElement; treat any real fullscreen entry as "teleprompter fullscreen"
+        const isAnyFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+        if (isAnyFull) {
+          // apply class to make teleprompter element fill viewport (we requested fullscreen on document)
+          teleprompterText.classList.add('is-fullscreen');
+          // wait two frames for browser to update layout, then start auto-scroll
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (!isScrolling) startScrolling();
+          }));
+        } else {
+          // exited fullscreen: remove class, keep current scroll position, stop auto only if intended
+          teleprompterText.classList.remove('is-fullscreen');
+        }
+      }
+ 
+      // listen for fullscreen changes (standard + webkit)
+      document.addEventListener('fullscreenchange', onFullScreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullScreenChange);
+      document.addEventListener('msfullscreenchange', onFullScreenChange);
 
       // Initialize
       // populate teleprompter with any initial textarea content
