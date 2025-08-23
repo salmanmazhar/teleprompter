@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teleprompter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #181818;
+      color: #f1f1f1;
+      padding: 0;
+    }
+    #container {
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+      width: 100vw;
+      box-sizing: border-box;
+    }
+    #controls {
+      flex: 1 1 40%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #232323;
+      padding: 20px;
+      min-width: 250px;
+      box-sizing: border-box;
+      border-right: 2px solid #333;
+      height: 100%;
+    }
+    #teleprompter-text {
+      flex: 2 1 60%;
+      height: 100%;
+      width: 100%;
+      border: none;
+      background: #111;
+      color: #f1f1f1;
+      overflow-y: auto;
+      font-size: 2em;
+      padding: 40px 20px;
+      box-sizing: border-box;
+      text-align: left;
+      line-height: 2; /* Increased line spacing */
+      transform: scaleX(-1); /* Mirror the text horizontally */
+    }
+    /* Ensure mirroring in fullscreen for all browsers */
+    #teleprompter-text:fullscreen,
+    #teleprompter-text:-webkit-full-screen,
+    #teleprompter-text:-ms-fullscreen {
+      transform: scaleX(-1) !important;
+    }
+    #teleprompter-text.fullscreen-sim {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+      background: #111;
+      color: #f1f1f1;
+      font-size: 2em;
+      padding: 40px 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 2;
+      transform: scaleX(-1);
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 8px;
+      display: block;
+      color: #f1f1f1;
+    }
+    #script-text-input {
+      width: 90vw;
+      max-width: 350px;
+      height: 80px;
+      font-size: 1em;
+      margin-bottom: 18px;
+      box-sizing: border-box;
+      resize: vertical;
+      background: #222;
+      color: #f1f1f1;
+      border: 1px solid #444;
+    }
+    #scroll-speed-input {
+      width: 180px;
+      margin-bottom: 10px;
+      background: #222;
+    }
+    #speed-value {
+      margin-left: 10px;
+      font-size: 1.1em;
+      color: #f1f1f1;
+    }
+    #start-btn, #stop-btn {
+      width: 100px;
+      margin: 10px 5px 0 5px;
+      font-size: 1em;
+      padding: 8px 0;
+      border-radius: 5px;
+      border: 1px solid #f1f1f1;
+      background: #222;
+      color: #f1f1f1;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    #start-btn:hover, #stop-btn:hover {
+      background: #444;
+      color: #fff;
+    }
+    @media (max-width: 700px) {
+      #container {
+        flex-direction: column;
+      }
+      #controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: none;
+        border-bottom: 2px solid #333;
+        min-width: unset;
+        padding: 10px;
+      }
+      #teleprompter-text {
+        padding: 20px 10px;
+        font-size: 1.2em;
+      }
+      #script-text-input {
+        width: 95vw;
+        max-width: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="controls">
+      <label for="script-text-input">Script:</label>
+      <textarea id="script-text-input" placeholder="Enter your script here"></textarea>
+      <label for="scroll-speed-input">Scroll Speed:</label>
+      <input type="range" id="scroll-speed-input" min="1" max="10" value="2">
+      <span id="speed-value">2</span>
+      <div>
+        <button id="start-btn">Start</button>
+        <button id="stop-btn">Stop</button>
+      </div>
+    </div>
+    <div id="teleprompter-text"></div>
+  </div>
+  <script>
+    (function() {
+      const textInput = document.getElementById('script-text-input');
+      const teleprompterText = document.getElementById('teleprompter-text');
+      const speedInput = document.getElementById('scroll-speed-input');
+      const speedValue = document.getElementById('speed-value');
+      const startBtn = document.getElementById('start-btn');
+      const stopBtn = document.getElementById('stop-btn');
+      let scrollInterval = null;
+      let scrollSpeed = parseInt(speedInput.value, 10);
+      let manualScrollDirection = null;
+      let manualScrollInterval = null;
+      let isScrolling = false;
+
+      function updateTeleprompterText() {
+        // Preserve line breaks by converting them to <br>
+        teleprompterText.innerHTML = textInput.value.replace(/\n/g, '<br>');
+        teleprompterText.scrollTop = 0;
+      }
+
+      function startScrolling() {
+        if (scrollInterval) clearInterval(scrollInterval);
+        scrollInterval = setInterval(() => {
+          teleprompterText.scrollTop += scrollSpeed * 0.3; // slower scroll for mobile
+          if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
+            clearInterval(scrollInterval);
+          }
+        }, 60);
+      }
+
+      function stopScrolling() {
+        if (scrollInterval) clearInterval(scrollInterval);
+      }
+
+      function toggleScrolling() {
+        if (isScrolling) {
+          stopScrolling();
+          isScrolling = false;
+          // Do NOT remove fullscreen-sim class here
+          // teleprompterText.classList.remove('fullscreen-sim'); // <-- Remove or comment out this line
+        } else {
+          teleprompterText.classList.add('fullscreen-sim');
+          startScrolling();
+          isScrolling = true;
+        }
+      }
+
+      textInput.addEventListener('input', () => {
+        updateTeleprompterText();
+        stopScrolling();
+      });
+
+      speedInput.addEventListener('input', () => {
+        scrollSpeed = parseInt(speedInput.value, 10);
+        speedValue.textContent = scrollSpeed;
+        if (scrollInterval) {
+          startScrolling();
+        }
+      });
+
+      startBtn.addEventListener('click', () => {
+        startScrolling();
+      });
+
+      stopBtn.addEventListener('click', () => {
+        stopScrolling();
+      });
+
+      teleprompterText.addEventListener('click', () => {
+        if (teleprompterText.classList.contains('fullscreen-sim')) {
+          teleprompterText.classList.remove('fullscreen-sim');
+          stopScrolling();
+          isScrolling = false;
+        }
+      });
+
+      document.addEventListener('keydown', function(event) {
+        console.log('Key code:', event.keyCode); // Log key codes for debugging
+        if (scrollInterval) { // Only allow manual scroll while auto-scrolling is active
+          if (event.keyCode === 38 && manualScrollDirection !== 'up') { // Up arrow
+            manualScrollDirection = 'up';
+            clearInterval(scrollInterval); // Pause auto-scroll
+            manualScrollInterval = setInterval(() => {
+              teleprompterText.scrollTop -= scrollSpeed * 0.3;
+              if (teleprompterText.scrollTop < 0) teleprompterText.scrollTop = 0;
+            }, 16); // ~60fps
+          }
+          if (event.keyCode === 40 && manualScrollDirection !== 'down') { // Down arrow
+            manualScrollDirection = 'down';
+            clearInterval(scrollInterval); // Pause auto-scroll
+            manualScrollInterval = setInterval(() => {
+              teleprompterText.scrollTop += scrollSpeed * 0.3;
+              if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
+                teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
+              }
+            }, 16); // ~60fps
+          }
+        }
+        if (event.keyCode === 89) { // 'Y' key
+          toggleScrolling();
+        }
+        if (event.keyCode === 75) { // 'K' key
+          teleprompterText.scrollTop = 0; // Go to beginning
+          stopScrolling();
+          startScrolling();
+          isScrolling = true;
+        }
+        if (event.keyCode === 85) { // 'U' key - increase speed
+          if (scrollSpeed < 10) {
+            scrollSpeed += 1;
+            speedInput.value = scrollSpeed;
+            speedValue.textContent = scrollSpeed;
+            if (scrollInterval) {
+              startScrolling();
+            }
+          }
+        }
+        if (event.keyCode === 76) { // 'L' key - decrease speed
+          if (scrollSpeed > 1) {
+            scrollSpeed -= 1;
+            speedInput.value = scrollSpeed;
+            speedValue.textContent = scrollSpeed;
+            if (scrollInterval) {
+              startScrolling();
+            }
+          }
+        }
+      });
+
+      document.addEventListener('keyup', function(event) {
+        if ((event.keyCode === 38 && manualScrollDirection === 'up') ||
+            (event.keyCode === 40 && manualScrollDirection === 'down')) {
+          manualScrollDirection = null;
+          if (manualScrollInterval) {
+            clearInterval(manualScrollInterval);
+            manualScrollInterval = null;
+          }
+          // Resume auto-scroll
+          startScrolling();
+        }
+      });
+
+//40 key is down 
+//30 key is up
+//76 right
+//85 left
+
+      // Initialize
+      updateTeleprompterText();
+    })();
+  </script>
+</body>
+</html>
