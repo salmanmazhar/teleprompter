@@ -129,7 +129,7 @@
         position: relative;
         overflow-y: scroll;
         padding: 20px 10px;
-        font-size: 1.2em;
+        font-size: 1.5em;
       }
       #controls {
         flex-direction: row;
@@ -187,7 +187,7 @@
       <label for="script-text-input">Script:</label>
       <textarea id="script-text-input" placeholder="Enter your script here"></textarea>
       <label for="scroll-speed-input">Scroll Speed:</label>
-      <input type="range" id="scroll-speed-input" min="1" max="30" value="2">
+      <input type="range" id="scroll-speed-input" min="1" max="50" value="25">
       <span id="speed-value">2</span>
       <div>
         <button id="start-btn">Start</button>
@@ -355,7 +355,7 @@
       stopScrolling();
       startScrolling();
     }
-    if (event.keyCode === 85 && scrollSpeed < 30) {
+    if (event.keyCode === 85 && scrollSpeed < 50) {
       scrollSpeed += 1;
       speedInput.value = scrollSpeed;
       speedValue.textContent = scrollSpeed;
