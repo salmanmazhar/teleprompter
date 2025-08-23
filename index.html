@@ -187,8 +187,8 @@
       <label for="script-text-input">Script:</label>
       <textarea id="script-text-input" placeholder="Enter your script here"></textarea>
       <label for="scroll-speed-input">Scroll Speed:</label>
-      <input type="range" id="scroll-speed-input" min="1" max="50" value="25">
-      <span id="speed-value">25</span>
+      <input type="range" id="scroll-speed-input" min="1" max="10" value="25">
+      <span id="speed-value">2</span>
       <div>
         <button id="start-btn">Start</button>
         <button id="paste-btn">Paste</button>
@@ -255,7 +255,7 @@
 
     if (scrollInterval) clearInterval(scrollInterval);
     scrollInterval = setInterval(() => {
-      teleprompterText.scrollTop += scrollSpeed;
+      teleprompterText.scrollTop += scrollSpeed * 1.5;
       if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
         teleprompterText.scrollTop = teleprompterText.scrollHeight - teleprompterText.clientHeight;
         clearInterval(scrollInterval);
@@ -351,18 +351,18 @@
 
     if (event.keyCode === 89) toggleScrolling(); // 'Y'
     if (event.keyCode === 75) {
-      teleprompterText.scrollTop = 0;
       stopScrolling();
+      teleprompterText.scrollTop = 0;
       startScrolling();
     }
-    if (event.keyCode === 85 && scrollSpeed < 50) {
-      scrollSpeed += 15;
+    if (event.keyCode === 85 && scrollSpeed < 10) {
+      scrollSpeed += 1;
       speedInput.value = scrollSpeed;
       speedValue.textContent = scrollSpeed;
       if (isScrolling) startScrolling();
     }
     if (event.keyCode === 76 && scrollSpeed > 1) {
-      scrollSpeed -= 15;
+      scrollSpeed -= 1;
       speedInput.value = scrollSpeed;
       speedValue.textContent = scrollSpeed;
       if (isScrolling) startScrolling();
