@@ -194,14 +194,12 @@
 
       function startScrolling() {
         if (scrollInterval) clearInterval(scrollInterval);
-        const teleprompterDiv = document.getElementById('teleprompter-text');
         scrollInterval = setInterval(() => {
-          if (teleprompterDiv.scrollTop + teleprompterDiv.clientHeight >= teleprompterDiv.scrollHeight) {
+          teleprompterText.scrollTop += scrollSpeed; // slower scroll for mobile
+          if (teleprompterText.scrollTop + teleprompterText.clientHeight >= teleprompterText.scrollHeight) {
             clearInterval(scrollInterval);
-            return;
           }
-          teleprompterDiv.scrollTop += scrollSpeed * 0.3;
-        }, 16); // Using 16ms for smoother ~60fps scrolling
+        }, 80);
       }
 
       function stopScrolling() {
