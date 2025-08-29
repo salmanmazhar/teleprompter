@@ -42,12 +42,13 @@
       color: #f1f1f1;
       overflow-y: scroll;
       font-size: 2em;
-      padding: 40px 20px;
+      padding: 80px 80px;
       box-sizing: border-box;
       text-align: left;
       line-height: 2;
       transform: none;
       position: relative;
+      top: 40px;
     }
     #teleprompter-text .tele-inner {
       transform: scaleX(-1);
@@ -64,7 +65,6 @@
       z-index: 9999;
       background: #111;
       color: #f1f1f1;
-      padding: 40px 20px;
       box-sizing: border-box;
       overflow-y: auto;
       text-align: left;
@@ -111,10 +111,6 @@
       color: #f1f1f1;
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
-    }
-    #start-btn:hover, #stop-btn:hover, #paste-btn:hover {
-      background: #444;
-      color: #fff;
     }
 
     @media (max-width: 700px) {
@@ -191,7 +187,6 @@
       <span id="speed-value">2</span>
       <div>
         <button id="start-btn">Start</button>
-        <button id="paste-btn">Paste</button>
         <button id="stop-btn">Stop</button>
       </div>
     </div>
@@ -217,21 +212,6 @@
   let isSimulatedFullscreen = false;
   let controlsVisible = false;
 
-  // ✅ Handle Paste Button
-  pasteBtn.addEventListener('click', async () => {
-    textInput.focus();
-    try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        textInput.value = text;
-        updateTeleprompterText();
-      } else {
-        document.execCommand('paste');
-      }
-    } catch (err) {
-      alert('Clipboard paste failed. Long-press in the textbox and choose "Paste" manually.');
-    }
-  });
 
   function updateTeleprompterText() {
     const teleInner = teleprompterText.querySelector('.tele-inner');
@@ -292,10 +272,12 @@
     stopScrolling();
   }
 
-  function toggleScrolling() {
+  function toggleScrolling(shouldExitScreen = true) {
     if (isScrolling) {
       stopScrolling();
+      if(shouldExitScreen){
       exitSimulatedFullscreen();
+      }
     } else {
       enterSimulatedFullscreen();
     }
@@ -325,6 +307,7 @@
 
   // Keyboard controls remain unchanged
   document.addEventListener('keydown', function(event) {
+    console.log(event.keyCode);
     const code = event.keyCode || event.which;
     if (code === 38 || code === 40) {
       event.preventDefault();
@@ -349,11 +332,11 @@
       }, 16);
     }
 
-    if (event.keyCode === 89) toggleScrolling(); // 'Y'
+    if (event.keyCode === 89) toggleScrolling(false); // 'Y'
     if (event.keyCode === 75) {
       stopScrolling();
       teleprompterText.scrollTop = 0;
-      startScrolling();
+      /*startScrolling();*/
     }
     if (event.keyCode === 85 && scrollSpeed < 10) {
       scrollSpeed += 1;
@@ -379,6 +362,25 @@
       wasAutoScrollingBeforeManual = false;
     }
   });
+  //Font size updates
+   document.addEventListener('keydown', function (event) {
+        const element = document.querySelector('.simulated-fullscreen');
+        if (!element) return;
+        // Get current font size in em
+        const computedFontSize = window.getComputedStyle(element).fontSize;
+        const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+        let fontSizeInEm = parseFloat(computedFontSize) / rootFontSize;
+        // Update font size based on key pressed
+        if (event.keyCode === 39) { // Right arrow key
+            fontSizeInEm += 0.1;
+        } else if (event.keyCode === 37) { // Left arrow key
+            fontSizeInEm = Math.max(0.1, fontSizeInEm - 0.1);
+        } else {
+            return;
+        }
+
+        element.style.fontSize = `${fontSizeInEm.toFixed(1)}em`;
+    });
 
   // Initial render
   updateTeleprompterText();
