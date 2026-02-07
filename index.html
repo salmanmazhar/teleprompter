@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <title>Teleprompter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -55,6 +60,7 @@
       display: block;
       white-space: pre-wrap;
       color: inherit;
+      margin: 0px 20%;
     }
     #teleprompter-text.is-fullscreen {
       position: fixed;
@@ -94,6 +100,16 @@
       background: #222;
     }
     #speed-value {
+      margin-left: 10px;
+      font-size: 1.1em;
+      color: #f1f1f1;
+    }
+    #font-size-input {
+      width: 180px;
+      margin-bottom: 10px;
+      background: #222;
+    }
+    #font-size-value {
       margin-left: 10px;
       font-size: 1.1em;
       color: #f1f1f1;
@@ -185,8 +201,12 @@
       <label for="scroll-speed-input">Scroll Speed:</label>
       <input type="range" id="scroll-speed-input" min="1" max="10" value="2">
       <span id="speed-value">2</span>
+      <label for="font-size-input">Font Size:</label>
+      <input type="range" id="font-size-input" min="0.5" max="4" step="0.1" value="2">
+      <span id="font-size-value">2</span>
       <div>
         <button id="start-btn">Start</button>
+        <button id="paste-btn">Paste</button>
         <button id="stop-btn">Stop</button>
       </div>
     </div>
@@ -198,6 +218,8 @@
   const teleprompterText = document.getElementById('teleprompter-text');
   const speedInput = document.getElementById('scroll-speed-input');
   const speedValue = document.getElementById('speed-value');
+  const fontSizeInput = document.getElementById('font-size-input');
+  const fontSizeValue = document.getElementById('font-size-value');
   const startBtn = document.getElementById('start-btn');
   const pasteBtn = document.getElementById('paste-btn');
   const stopBtn = document.getElementById('stop-btn');
@@ -205,6 +227,7 @@
 
   let scrollInterval = null;
   let scrollSpeed = parseInt(speedInput.value, 10);
+  let fontSize = parseFloat(fontSizeInput.value);
   let manualScrollDirection = null;
   let manualScrollInterval = null;
   let isScrolling = false;
@@ -212,6 +235,54 @@
   let isSimulatedFullscreen = false;
   let controlsVisible = false;
 
+  // ====== FIREBASE SYNC ======
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT"
+  };
+
+  let db = null;
+  let latestRef = null;
+  const clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('c_' + Math.random().toString(36).slice(2));
+  let ignoreNextUpdate = false;
+
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    latestRef = db.ref('teleprompter/latestText');
+
+    // Listen for remote updates
+    latestRef.on('value', snapshot => {
+      if (ignoreNextUpdate) {
+        ignoreNextUpdate = false;
+        return;
+      }
+      const v = snapshot.val();
+      if (!v) return;
+      // Ignore updates from this client to avoid echo
+      if (v.clientId === clientId) return;
+      // Update textarea with remote text
+      textInput.value = v.text || '';
+      updateTeleprompterText();
+      console.log('Updated from remote device');
+    });
+  } catch (e) {
+    console.warn('Firebase not available:', e);
+  }
+
+  function writeToDatabase(text) {
+    if (!latestRef) return;
+    const safe = (text || '').slice(0, 20000);
+    ignoreNextUpdate = true;
+    latestRef.set({
+      text: safe,
+      clientId,
+      ts: Date.now()
+    }).catch(err => console.warn('Firebase write failed:', err));
+  }
+  // ====== END FIREBASE ======
 
   function updateTeleprompterText() {
     const teleInner = teleprompterText.querySelector('.tele-inner');
@@ -221,13 +292,38 @@
   textInput.addEventListener('input', () => {
     updateTeleprompterText();
     stopScrolling();
+    writeToDatabase(textInput.value);
   });
+
+  speedInput.addEventListener('input', () => {
+    scrollSpeed = parseInt(speedInput.value, 10);
+    speedValue.textContent = scrollSpeed;
+  });
+
+  fontSizeInput.addEventListener('input', () => {
+    fontSize = parseFloat(fontSizeInput.value);
+    fontSizeValue.textContent = fontSize.toFixed(1);
+    updateFontSize();
+  });
+
+  function updateFontSize() {
+    const element = teleprompterText.classList.contains('simulated-fullscreen')
+      ? teleprompterText
+      : teleprompterText;
+    element.style.fontSize = `${fontSize}em`;
+  }
 
   textInput.addEventListener('paste', () => {
-    setTimeout(updateTeleprompterText, 0);
+    setTimeout(() => {
+      updateTeleprompterText();
+      writeToDatabase(textInput.value);
+    }, 0);
   });
 
-  textInput.addEventListener('change', updateTeleprompterText);
+  textInput.addEventListener('change', () => {
+    updateTeleprompterText();
+    writeToDatabase(textInput.value);
+  });
 
   function startScrolling() {
     if (manualScrollInterval) clearInterval(manualScrollInterval);
@@ -293,6 +389,33 @@
     stopScrolling();
     exitSimulatedFullscreen();
   });
+
+  // ✅ Paste button: read clipboard and broadcast to Firebase
+  async function handlePaste(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    try {
+      const txt = await navigator.clipboard.readText();
+      textInput.value = txt || '';
+      updateTeleprompterText();
+      writeToDatabase(txt);
+      startScrolling();
+    } catch (err) {
+      console.warn('Clipboard read failed:', err);
+      // Fallback prompt
+      const manual = window.prompt('Paste your script here:', '');
+      if (manual !== null) {
+        textInput.value = manual;
+        updateTeleprompterText();
+        writeToDatabase(manual);
+        startScrolling();
+      }
+    }
+  }
+
+  if (pasteBtn) {
+    pasteBtn.addEventListener('pointerdown', handlePaste);
+    pasteBtn.addEventListener('click', handlePaste);
+  }
 
   // ✅ Tap to toggle controls in simulated fullscreen
   teleprompterText.addEventListener('click', () => {
